@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reporte de Onboarding · Ventas Digitales</title>
+  <style>
+    :root {
+      --azul: #143c78;
+      --azul-claro: #eaf0f8;
+      --borde: #d3d7de;
+      --texto: #24303f;
+      --gris: #5f6b7a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0; background: #f4f6f9; color: var(--texto);
+      display: flex; justify-content: center; padding: 32px 16px;
+    }
+    .card {
+      background: #fff; border: 1px solid var(--borde); border-radius: 12px;
+      width: 100%; max-width: 520px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    h1 { font-size: 20px; margin: 0 0 4px; color: var(--azul); }
+    p.sub { margin: 0 0 24px; color: var(--gris); font-size: 14px; }
+    label { display: block; font-size: 14px; font-weight: 500; margin: 0 0 6px; }
+    .fila { display: flex; gap: 16px; margin-bottom: 20px; }
+    .fila > div { flex: 1; }
+    input[type="date"] {
+      width: 100%; padding: 10px 12px; border: 1px solid var(--borde);
+      border-radius: 8px; font-size: 15px; color: var(--texto);
+    }
+    button {
+      width: 100%; padding: 12px; background: var(--azul); color: #fff;
+      border: none; border-radius: 8px; font-size: 15px; font-weight: 500;
+      cursor: pointer;
+    }
+    button:hover { background: #0f2f5f; }
+    button:disabled { background: #9aa7b8; cursor: default; }
+    .resultado {
+      margin-top: 24px; padding: 20px; background: var(--azul-claro);
+      border-radius: 8px; text-align: center; display: none;
+    }
+    .resultado .num { font-size: 40px; font-weight: 600; color: var(--azul); line-height: 1; }
+    .resultado .txt { font-size: 14px; color: var(--gris); margin-top: 6px; }
+    .csv {
+      display: inline-block; margin-top: 14px; font-size: 14px;
+      color: var(--azul); text-decoration: underline; cursor: pointer; background: none; width: auto; padding: 0;
+    }
+    .error {
+      margin-top: 20px; padding: 12px 16px; background: #fdecec;
+      border: 1px solid #f3c2c2; border-radius: 8px; color: #a12626; font-size: 14px; display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Reporte de Onboarding</h1>
+    <p class="sub">Ventas Digitales · elige un rango de fechas y obtén el conteo.</p>
+
+    <div class="fila">
+      <div>
+        <label for="start">Fecha inicial</label>
+        <input type="date" id="start">
+      </div>
+      <div>
+        <label for="end">Fecha final</label>
+        <input type="date" id="end">
+      </div>
+    </div>
+
+    <button id="btn" onclick="consultar()">Obtener información</button>
+
+    <div class="resultado" id="resultado">
+      <div class="num" id="num">0</div>
+      <div class="txt" id="periodo"></div>
+      <button class="csv" id="csv" onclick="descargarCsv()">Descargar CSV</button>
+    </div>
+
+    <div class="error" id="error"></div>
+  </div>
+
+  <script>
+    // Rango por defecto: el mes pasado
+    (function () {
+      const hoy = new Date();
+      const iniMesPasado = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+      const finMesPasado = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+      const fmt = (d) => d.toISOString().slice(0, 10);
+      document.getElementById('start').value = fmt(iniMesPasado);
+      document.getElementById('end').value = fmt(finMesPasado);
+    })();
+
+    let ultimo = null;
+
+    async function consultar() {
+      const start = document.getElementById('start').value;
+      const end = document.getElementById('end').value;
+      const btn = document.getElementById('btn');
+      const resultado = document.getElementById('resultado');
+      const error = document.getElementById('error');
+
+      resultado.style.display = 'none';
+      error.style.display = 'none';
+
+      if (!start || !end) {
+        mostrarError('Debes elegir ambas fechas.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Consultando...';
+
+      try {
+        const r = await fetch(`/api/report?start=${start}&end=${end}`);
+        const data = await r.json();
+        if (!r.ok) {
+          mostrarError(data.error || 'Ocurrió un error.');
+          return;
+        }
+        ultimo = data;
+        document.getElementById('num').textContent = data.conteo;
+        document.getElementById('periodo').textContent = `Onboardings del ${data.start} al ${data.end}`;
+        resultado.style.display = 'block';
+      } catch (e) {
+        mostrarError('No se pudo contactar el servidor.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Obtener información';
+      }
+    }
+
+    function mostrarError(msg) {
+      const error = document.getElementById('error');
+      error.textContent = msg;
+      error.style.display = 'block';
+    }
+
+    function descargarCsv() {
+      if (!ultimo) return;
+      const filas = [
+        ['Fecha inicial', 'Fecha final', 'Conteo onboarding'],
+        [ultimo.start, ultimo.end, ultimo.conteo]
+      ];
+      const csv = filas.map(f => f.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `onboarding_${ultimo.start}_${ultimo.end}.csv`;
+      a.click();
+    }
+  </script>
+</body>
+</html>
